@@ -58,7 +58,7 @@ RSpec.describe "bundle open" do
       expect(out).to include("bundler_editor #{default_bundle_path("gems", "activerecord-2.3.2")}")
     end
 
-    it "select the gem from many match gems" do
+    it "select the gem from many match gems", :readline do
       env = { "EDITOR" => "echo editor", "VISUAL" => "echo visual", "BUNDLER_EDITOR" => "echo bundler_editor" }
       bundle "open active", :env => env do |input, _, _|
         input.puts "2"
@@ -67,7 +67,7 @@ RSpec.describe "bundle open" do
       expect(out).to match(/bundler_editor #{default_bundle_path('gems', 'activerecord-2.3.2')}\z/)
     end
 
-    it "allows selecting exit from many match gems" do
+    it "allows selecting exit from many match gems", :readline do
       env = { "EDITOR" => "echo editor", "VISUAL" => "echo visual", "BUNDLER_EDITOR" => "echo bundler_editor" }
       bundle! "open active", :env => env do |input, _, _|
         input.puts "0"
@@ -93,7 +93,17 @@ RSpec.describe "bundle open" do
   end
 
   context "when opening a default gem" do
+    let(:default_gems) do
+      ruby!(<<-RUBY).split("\n")
+        if Gem::Specification.is_a?(Enumerable)
+          puts Gem::Specification.select(&:default_gem?).map(&:name)
+        end
+      RUBY
+    end
+
     before do
+      skip "No default gems available on this test run" if default_gems.empty?
+
       install_gemfile <<-G
         gem "json"
       G

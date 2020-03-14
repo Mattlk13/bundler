@@ -39,16 +39,17 @@ When we cherry-pick, we cherry-pick the merge commits using the following comman
 $ git cherry-pick -m 1 MERGE_COMMIT_SHAS
 ```
 
-For example, for PR [#5029](https://github.com/bundler/bundler/pull/5029), we
-cherry picked commit [dd6aef9](https://github.com/bundler/bundler/commit/dd6aef97a5f2e7173f406267256a8c319d6134ab),
-not [4fe9291](https://github.com/bundler/bundler/commit/4fe92919f51e3463f0aad6fa833ab68044311f03)
+For example, for PR [#5029](https://github.com/rubygems/bundler/pull/5029), we
+cherry picked commit [dd6aef9](https://github.com/rubygems/bundler/commit/dd6aef97a5f2e7173f406267256a8c319d6134ab),
+not [4fe9291](https://github.com/rubygems/bundler/commit/4fe92919f51e3463f0aad6fa833ab68044311f03)
 using:
 
 ```bash
 $ git cherry-pick -m 1 dd6aef9
 ```
 
-The `rake release:patch` command will automatically handle cherry-picking, and is further detailed below.
+The `rake release:prepare_patch` command will automatically handle
+cherry-picking, and is further detailed below.
 
 ## Changelog
 
@@ -94,7 +95,7 @@ Here's the checklist for releasing new minor versions:
 Wait! You're not done yet! After your prelease looks good:
 
 * [ ] Update `version.rb` to a final version (i.e. 1.12.0)
-* [ ] In the [bundler/bundler-site](https://github.com/bundler/bundler-site) repo,
+* [ ] In the [rubygems/bundler-site](https://github.com/rubygems/bundler-site) repo,
   copy the previous version's docs to create a new version (e.g. `cp -r v1.11 v1.12`)
 * [ ] Update the new docs as needed, paying special attention to the "What's new"
   page for this version
@@ -112,7 +113,7 @@ _anything_ wrong as the release manager.
 #### Branching
 
 Minor releases of the next version start with a new release branch from the
-current state of master: `1-12-stable`, and are immediately followed by a `.pre.0` release.
+current state of master: `1-12-stable`, and are immediately followed by a `.pre.1` release.
 
 Once that `-stable` branch has been cut from `master`, changes for that minor
 release series (1.12) will only be made _intentionally_, via patch releases.
@@ -128,16 +129,22 @@ per bug fixed. Then run `rake release` from the `-stable` branch,
 and pour yourself a tasty drink!
 
 PRs containing regression fixes for a patch release of the current minor version
-are merged to master. These commits are then cherry-picked from master onto the
-minor branch (`1-12-stable`).
+are merged to master. These commits need to be cherry-picked from master onto
+the minor branch (`1-12-stable`).
 
-There is a `rake release:patch` rake task that automates creating a patch release.
-It takes a single argument, the _exact_ patch release being made (e.g. `1.12.3`),
-and checks out the appropriate stable branch (`1-12-stable`), grabs the `1.12.3`
-milestone from GitHub, ensures all PRs are closed, and then cherry-picks those changes
-(and only those changes) to the stable branch. The task then bumps the version in the
-version file, prompts you to update the `CHANGELOG.md`, then will commit those changes
-and run `rake release`!
+There is a `rake release:prepare_patch` rake task that helps with creating a patch
+release. It takes a single argument, the _exact_ patch release being made (e.g.
+`1.12.3`), but if not given it will bump the tiny version number by one. This
+task checks out the appropriate stable branch (`1-12-stable`), grabs the
+`1.12.3` milestone from GitHub, ensures all PRs are closed, and then
+cherry-picks those changes (and only those changes) to a new branch based off
+the stable branch. Then bumps the version in the version file and commits that
+change on top of the cherry-picks.
+
+Now you have a release branch ready to be merged into the stable branch. You'll
+want to open a PR from this branch into the stable branch and provided CI is
+green, you can go ahead, merge the PR and run `rake release` from the updated
+stable branch.
 
 ## Beta testing
 

@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
-$:.unshift File.expand_path("..", __FILE__)
-$:.unshift File.expand_path("../../lib", __FILE__)
+require_relative "support/path"
+
+$:.unshift Spec::Path.lib_dir.to_s
 
 require "bundler/psyched_yaml"
 require "bundler/vendored_fileutils"
-require "uri"
+require "bundler/vendored_uri"
 require "digest"
 
 if File.expand_path(__FILE__) =~ %r{([^\w/\.:\-])}
@@ -15,10 +16,16 @@ end
 require "bundler"
 require "rspec"
 
-Dir["#{File.expand_path("../support", __FILE__)}/*.rb"].each do |file|
-  file = file.gsub(%r{\A#{Regexp.escape File.expand_path("..", __FILE__)}/}, "")
-  require file unless file.end_with?("hax.rb")
-end
+require_relative "support/builders"
+require_relative "support/filters"
+require_relative "support/helpers"
+require_relative "support/indexes"
+require_relative "support/matchers"
+require_relative "support/parallel"
+require_relative "support/permissions"
+require_relative "support/platforms"
+require_relative "support/sometimes"
+require_relative "support/sudo"
 
 $debug = false
 
@@ -34,7 +41,6 @@ RSpec.configure do |config|
   config.include Spec::Indexes
   config.include Spec::Matchers
   config.include Spec::Path
-  config.include Spec::Rubygems
   config.include Spec::Platforms
   config.include Spec::Sudo
   config.include Spec::Permissions
@@ -52,31 +58,6 @@ RSpec.configure do |config|
 
   config.bisect_runner = :shell
 
-  if ENV["BUNDLER_SUDO_TESTS"] && Spec::Sudo.present?
-    config.filter_run :sudo => true
-  else
-    config.filter_run_excluding :sudo => true
-  end
-
-  if ENV["BUNDLER_REALWORLD_TESTS"]
-    config.filter_run :realworld => true
-  else
-    config.filter_run_excluding :realworld => true
-  end
-
-  git_version = Bundler::Source::Git::GitProxy.new(nil, nil, nil).version
-
-  config.filter_run_excluding :ruby => RequirementChecker.against(RUBY_VERSION)
-  config.filter_run_excluding :rubygems => RequirementChecker.against(Gem::VERSION)
-  config.filter_run_excluding :git => RequirementChecker.against(git_version)
-  config.filter_run_excluding :bundler => RequirementChecker.against(Bundler::VERSION.split(".")[0])
-  config.filter_run_excluding :ruby_repo => !(ENV["BUNDLE_RUBY"] && ENV["BUNDLE_GEM"]).nil?
-  config.filter_run_excluding :no_color_tty => Gem.win_platform? || !ENV["GITHUB_ACTION"].nil?
-  config.filter_run_excluding :github_action_linux => !ENV["GITHUB_ACTION"].nil? && (ENV["RUNNER_OS"] == "Linux")
-
-  config.filter_run_when_matching :focus unless ENV["CI"]
-
-  original_wd  = Dir.pwd
   original_env = ENV.to_hash
 
   config.expect_with :rspec do |c|
@@ -88,15 +69,16 @@ RSpec.configure do |config|
   end
 
   config.around :each do |example|
-    if ENV["BUNDLE_RUBY"]
+    if ENV["RUBY"]
       orig_ruby = Gem.ruby
-      Gem.ruby = ENV["BUNDLE_RUBY"]
+      Gem.ruby = ENV["RUBY"]
     end
     example.run
-    Gem.ruby = orig_ruby if ENV["BUNDLE_RUBY"]
+    Gem.ruby = orig_ruby if ENV["RUBY"]
   end
 
   config.before :suite do
+    require_relative "support/rubygems_ext"
     Spec::Rubygems.setup
     ENV["RUBYOPT"] = "#{ENV["RUBYOPT"]} -r#{Spec::Path.spec_dir}/support/hax.rb"
     ENV["BUNDLE_SPEC_RUN"] = "true"
@@ -108,7 +90,7 @@ RSpec.configure do |config|
 
     original_env = ENV.to_hash
 
-    if ENV["BUNDLE_RUBY"]
+    if ENV["RUBY"]
       FileUtils.cp_r Spec::Path.bindir, File.join(Spec::Path.root, "lib", "exe")
     end
   end
@@ -121,10 +103,10 @@ RSpec.configure do |config|
     ENV.replace(original_env)
     reset!
     system_gems []
-    in_app_root
+
     @command_executions = []
 
-    example.run
+    Bundler.ui.silence { example.run }
 
     all_output = @command_executions.map(&:to_s_verbose).join("\n\n")
     if example.exception && !all_output.empty?
@@ -134,12 +116,10 @@ RSpec.configure do |config|
         message
       end
     end
-
-    Dir.chdir(original_wd)
   end
 
   config.after :suite do
-    if ENV["BUNDLE_RUBY"]
+    if ENV["RUBY"]
       FileUtils.rm_rf File.join(Spec::Path.root, "lib", "exe")
     end
   end
